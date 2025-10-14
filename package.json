@@ -33,9 +33,13 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@discordjs/voice": "^0.19.0",
     "discord.js": "^14.23.2",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "yt-search": "^2.13.1",
+    "ytdl-core": "^4.11.5"
   },
-  "devDependencies": {},
-  "optionalDependencies": {}
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
 }
