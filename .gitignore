@@ -25,3 +25,4 @@ Thumbs.db
 # Misc
 *.pem                  # private keys
 *.sublime-workspace
+commandStructure.md
