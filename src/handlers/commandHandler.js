@@ -65,7 +65,11 @@ class CommandHandler {
                         delete require.cache[require.resolve(filePath)];
                     }
 
-                    const command = require(filePath);
+                    // Support both CommonJS exports and transpiled ES module default exports
+                    const requiredModule = require(filePath);
+                    const command = requiredModule && requiredModule.__esModule && requiredModule.default
+                        ? requiredModule.default
+                        : (requiredModule && requiredModule.default) || requiredModule;
 
                     if (this.validateCommand(command, fileName)) {
                         this.client.commands.set(command.data.name, command);
@@ -133,15 +137,19 @@ class CommandHandler {
             // Fallback: try to find a file that exports data.name === commandName
             if (!filePath) {
                 for (const p of jsFiles) {
-                    try {
-                        const mod = require(p);
-                        if (mod && mod.data && mod.data.name === commandName) {
-                            filePath = p;
-                            break;
+                        try {
+                            const modProbe = require(p);
+                            const probe = modProbe && modProbe.__esModule && modProbe.default
+                                ? modProbe.default
+                                : (modProbe && modProbe.default) || modProbe;
+
+                            if (probe && probe.data && probe.data.name === commandName) {
+                                filePath = p;
+                                break;
+                            }
+                        } catch (e) {
+                            // ignore errors while probing modules
                         }
-                    } catch (e) {
-                        // ignore errors while probing modules
-                    }
                 }
             }
 
@@ -152,7 +160,10 @@ class CommandHandler {
 
             delete require.cache[require.resolve(filePath)];
 
-            const newCommand = require(filePath);
+            const newRequired = require(filePath);
+            const newCommand = newRequired && newRequired.__esModule && newRequired.default
+                ? newRequired.default
+                : (newRequired && newRequired.default) || newRequired;
 
             if (this.validateCommand(newCommand, path.basename(filePath))) {
                 this.client.commands.set(newCommand.data.name, newCommand);
