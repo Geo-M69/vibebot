@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const { Collection } = require('discord.js');
 const logger = require('../utils/logger');
@@ -19,17 +19,21 @@ class CommandHandler {
      * @param {string} dir - Absolute path to directory
      * @returns {string[]} - Array of absolute file paths
      */
-    _getJsFilesRecursive(dir) {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
+    async _getJsFilesRecursive(dir) {
         let files = [];
-
-        for (const entry of entries) {
-            const res = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                files = files.concat(this._getJsFilesRecursive(res));
-            } else if (entry.isFile() && res.endsWith('.js')) {
-                files.push(res);
+        try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                const res = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    const nested = await this._getJsFilesRecursive(res);
+                    files = files.concat(nested);
+                } else if (entry.isFile() && res.endsWith('.js')) {
+                    files.push(res);
+                }
             }
+        } catch (err) {
+            logger.error(`Failed to read directory ${dir}`, err);
         }
 
         return files;
@@ -41,13 +45,15 @@ class CommandHandler {
      */
     async loadCommands(commandsPath = path.join(process.cwd(), 'commands')) {
         try {
-            if (!fs.existsSync(commandsPath)) {
+            try {
+                await fs.access(commandsPath);
+            } catch (err) {
                 logger.warn(`Commands directory not found: ${commandsPath}`);
                 return;
             }
 
             // Collect .js files recursively so commands can be organized in subfolders
-            const commandFiles = this._getJsFilesRecursive(commandsPath);
+            const commandFiles = await this._getJsFilesRecursive(commandsPath);
 
             if (commandFiles.length === 0) {
                 logger.warn('No command files found');

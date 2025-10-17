@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const customCommandService = require('../services/customCommandService');
 const { REST, Routes } = require('discord.js');
 const config = require('../config/botConfig');
+const { formatMessage } = require('../utils/formatMessage');
 
 /**
  * Interaction event handler - Handles slash command interactions
@@ -98,12 +99,9 @@ module.exports = {
             try {
                 const guildId = interaction.guildId;
                 if (guildId) {
-                    const stored = customCommandService.getCommand(guildId, interaction.commandName);
+                    const stored = await customCommandService.getCommand(guildId, interaction.commandName);
                     if (stored) {
-                        const output = stored
-                            .replace(/\{user\}/gi, `${interaction.user.tag}`)
-                            .replace(/\{mention\}/gi, `<@${interaction.user.id}>`)
-                            .replace(/\{guild\}/gi, `${interaction.guild ? interaction.guild.name : ''}`);
+                        const output = formatMessage(stored, { userTag: interaction.user.tag, userId: interaction.user.id, guildName: interaction.guild ? interaction.guild.name : '' });
 
                         await interaction.reply({ content: output });
                         return;

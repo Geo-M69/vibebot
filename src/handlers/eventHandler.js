@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
 
@@ -18,13 +18,15 @@ class EventHandler {
      */
     async loadEvents(eventsPath = path.join(__dirname, '../events')) {
         try {
-            if (!fs.existsSync(eventsPath)) {
+            try {
+                await fs.access(eventsPath);
+            } catch (err) {
                 logger.warn(`Events directory not found: ${eventsPath}`);
                 return;
             }
 
-            const eventFiles = fs.readdirSync(eventsPath)
-                .filter(file => file.endsWith('.js'));
+            const entries = await fs.readdir(eventsPath);
+            const eventFiles = entries.filter(file => file.endsWith('.js'));
 
             if (eventFiles.length === 0) {
                 logger.warn('No event files found');

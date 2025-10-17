@@ -1,20 +1,17 @@
 const { Events, ChannelType } = require('discord.js');
 const welcomeService = require('../services/welcomeService');
 const logger = require('../utils/logger');
+const { formatMessage } = require('../utils/formatMessage');
 
 module.exports = {
     name: Events.GuildMemberAdd,
     async execute(member) {
         try {
             const guild = member.guild;
-            const raw = welcomeService.getWelcomeMessage(guild.id);
+            const raw = await welcomeService.getWelcomeMessage(guild.id);
             if (!raw) return; // no welcome message set
 
-            // Replace placeholders
-            const message = raw
-                .replace(/\{user\}/gi, `${member.user.tag}`)
-                .replace(/\{mention\}/gi, `<@${member.id}>`)
-                .replace(/\{guild\}/gi, `${guild.name}`);
+            const message = formatMessage(raw, { userTag: member.user.tag, userId: member.id, guildName: guild.name });
 
             // Prefer system channel, fallback to first writable text channel
             let channel = guild.systemChannel;

@@ -1,56 +1,24 @@
-const fs = require('fs');
-const path = require('path');
-const logger = require('../utils/logger');
+const { createStore } = require('./jsonStore');
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const FILE_PATH = path.join(DATA_DIR, 'welcomeMessages.json');
-
-function ensureDataDir() {
-    try {
-        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    } catch (err) {
-        logger.error('Failed to create data directory', err);
-    }
-}
-
-function loadAll() {
-    try {
-        ensureDataDir();
-        if (!fs.existsSync(FILE_PATH)) return {};
-        const raw = fs.readFileSync(FILE_PATH, 'utf8');
-        return JSON.parse(raw || '{}');
-    } catch (err) {
-        logger.error('Failed to load welcome messages', err);
-        return {};
-    }
-}
-
-function saveAll(data) {
-    try {
-        ensureDataDir();
-        fs.writeFileSync(FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
-    } catch (err) {
-        logger.error('Failed to save welcome messages', err);
-    }
-}
+const store = createStore('welcomeMessages.json');
 
 module.exports = {
-    getWelcomeMessage(guildId) {
-        const all = loadAll();
+    async getWelcomeMessage(guildId) {
+        const all = await store.getAll();
         return all[guildId] || null;
     },
 
-    setWelcomeMessage(guildId, message) {
-        const all = loadAll();
+    async setWelcomeMessage(guildId, message) {
+        const all = await store.getAll();
         all[guildId] = message;
-        saveAll(all);
+        await store.set(guildId, all[guildId]);
     },
 
-    clearWelcomeMessage(guildId) {
-        const all = loadAll();
+    async clearWelcomeMessage(guildId) {
+        const all = await store.getAll();
         if (all[guildId]) {
             delete all[guildId];
-            saveAll(all);
+            await store.set(guildId, all[guildId] || {});
         }
     }
 };

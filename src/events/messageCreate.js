@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const customCommandService = require('../services/customCommandService');
 const logger = require('../utils/logger');
+const { formatMessage } = require('../utils/formatMessage');
 
 // Default prefix - changeable if you implement a prefix service
 const DEFAULT_PREFIX = '!';
@@ -34,7 +35,7 @@ module.exports = {
                     return;
                 }
 
-                customCommandService.setCommand(guildId, name.toLowerCase(), response);
+                await customCommandService.setCommand(guildId, name.toLowerCase(), response);
                 await message.reply(`Custom command '!${name}' created.`);
                 return;
             }
@@ -51,20 +52,15 @@ module.exports = {
                     return;
                 }
 
-                customCommandService.removeCommand(guildId, name.toLowerCase());
+                await customCommandService.removeCommand(guildId, name.toLowerCase());
                 await message.reply(`Custom command '!${name}' removed.`);
                 return;
             }
 
             // Execute stored custom commands
-            const stored = customCommandService.getCommand(guildId, command);
+            const stored = await customCommandService.getCommand(guildId, command);
             if (stored) {
-                // Support placeholders
-                const output = stored
-                    .replace(/\{user\}/gi, `${message.author.tag}`)
-                    .replace(/\{mention\}/gi, `<@${message.author.id}>`)
-                    .replace(/\{guild\}/gi, `${message.guild ? message.guild.name : ''}`);
-
+                const output = formatMessage(stored, { userTag: message.author.tag, userId: message.author.id, guildName: message.guild ? message.guild.name : '' });
                 await message.channel.send(output);
             }
         } catch (error) {
