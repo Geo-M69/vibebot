@@ -40,6 +40,7 @@
     "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@types/node": "^20.11.30"
   }
 }

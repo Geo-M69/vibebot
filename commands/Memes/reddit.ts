@@ -1,4 +1,9 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChatInputCommandInteraction, EmbedBuilder } from "discord.js";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { spawn } from "child_process";
+import * as crypto from "crypto";
 
 export default {
     data: new SlashCommandBuilder()
@@ -8,6 +13,15 @@ export default {
             option.setName('subreddit')
                 .setDescription('Subreddit to pull from (default: r/shitposting)')
                 .setRequired(false))
+        .addStringOption(option =>
+            option.setName('filter')
+                .setDescription('Filter by media type (video or image/gif)')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'video', value: 'video' },
+                    { name: 'image/gif', value: 'image' }
+                )
+        )
         .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages),
     async execute(interaction: ChatInputCommandInteraction) {
         if (!interaction.guild) {
@@ -25,6 +39,8 @@ export default {
         if (!me || !me.permissions.has(PermissionFlagsBits.SendMessages)) {
             return interaction.reply({ content: "I don't have permission to send messages.", ephemeral: true });
         }
+        // We need AttachFiles to upload merged videos
+        const canAttach = me.permissions.has(PermissionFlagsBits.AttachFiles);
 
         const channel = interaction.channel;
         if (
@@ -123,7 +139,28 @@ export default {
             const posts = (data?.data?.children || []).map((c: any) => c.data);
 
             // Filter suitable posts (non-NSFW, has media)
-            const candidates = posts.filter((p: any) => {
+            // Optional filter selector
+            const rawFilter = interaction.options.getString('filter')?.toLowerCase() || '';
+            const filterType: 'video' | 'image' | null = rawFilter ? (rawFilter.startsWith('vid') ? 'video' : 'image') : null;
+
+            const isVideoLikePost = (p: any) => {
+                if (!p) return false;
+                if (p.is_video) return true;
+                if (p.media?.reddit_video) return true;
+                if (p.url && /\.(mp4|webm)$/i.test(p.url)) return true;
+                if (typeof p.post_hint === 'string' && /video/i.test(p.post_hint)) return true;
+                return false;
+            };
+
+            const isImageLikePost = (p: any) => {
+                if (!p) return false;
+                if (p.post_hint === "image") return true;
+                if (p.url && /\.(jpe?g|png|gif|gifv)$/i.test(p.url)) return true;
+                if (p.preview && p.preview.images && p.preview.images.length) return true;
+                return false;
+            };
+
+            let candidates = posts.filter((p: any) => {
                 if (!p) return false;
                 if (p.over_18) return false;
                 if (p.is_video) return true;
@@ -133,8 +170,15 @@ export default {
                 return false;
             });
 
+            if (filterType === 'video') {
+                candidates = candidates.filter(isVideoLikePost);
+            } else if (filterType === 'image') {
+                candidates = candidates.filter(isImageLikePost);
+            }
+
             if (!candidates.length) {
-                return interaction.editReply({ content: `Couldn't find a suitable post in r/${subreddit} right now. Try another subreddit or try again later.` });
+                const desc = filterType ? `${filterType} ` : '';
+                return interaction.editReply({ content: `Couldn't find a suitable ${desc}post in r/${subreddit} right now. Try another subreddit or try again later.` });
             }
 
             const chosen = candidates[Math.floor(Math.random() * candidates.length)];
@@ -157,14 +201,180 @@ export default {
             }
 
             if (mediaUrl) {
-                // if it's an mp4 or video link, show it as content link and include thumbnail if available
                 const isVideo = /\.(mp4|webm)$/i.test(mediaUrl) || chosen.is_video;
                 if (isVideo) {
+                    // If we cannot attach files, inform and fall back to a link
+                    if (!canAttach) {
+                        await interaction.editReply({
+                            embeds: [embed],
+                            content: `I don't have the Attach Files permission here, so I can't upload the merged video with audio. Here's the post link (Reddit's player may be video-only): ${mediaUrl}`
+                        });
+                        return;
+                    }
+                    // If video, try to download video and audio, merge via ffmpeg, and upload the file
                     if (chosen.thumbnail && chosen.thumbnail !== "self" && chosen.thumbnail !== "default") {
                         embed.setImage(chosen.thumbnail);
                     }
-                    await interaction.editReply({ embeds: [embed], content: mediaUrl });
+
+                    const downloadToFile = async (url: string, dest: string) => {
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`Failed to download ${url}: ${res.status}`);
+                        const ab = await res.arrayBuffer();
+                        await fs.promises.writeFile(dest, Buffer.from(ab));
+                    };
+
+                    const deriveAudioUrlFromFallback = (fb: string): string | null => {
+                        try {
+                            if (/DASH_\d+\.mp4/i.test(fb)) return fb.replace(/DASH_\d+\.mp4/i, "DASH_audio.mp4");
+                            return fb.replace(/\/[^\/]+\.mp4$/i, "/DASH_audio.mp4");
+                        } catch {
+                            return null;
+                        }
+                    };
+
+                    const tmpDir = os.tmpdir();
+                    const id = (crypto as any).randomUUID ? (crypto as any).randomUUID() : String(Date.now()) + Math.floor(Math.random() * 10000);
+                    const videoPath = path.join(tmpDir, `reddit_video_${id}.mp4`);
+                    const audioPath = path.join(tmpDir, `reddit_audio_${id}.mp4`);
+                    const outPath = path.join(tmpDir, `reddit_merged_${id}.mp4`);
+
+                    let didUploadFile = false;
+
+                    try {
+                        // Prefer using DASH manifest if available (ffmpeg will mux A/V automatically)
+                        const dashUrl = chosen.media?.reddit_video?.dash_url as string | undefined;
+                        const tryFfmpegOnDash = async (): Promise<boolean> => {
+                            if (!dashUrl) return false;
+                            // ffmpeg read mpd and mux streams
+                            const stderrChunks: Buffer[] = [];
+                            await new Promise<void>((resolve, reject) => {
+                                const args = [
+                                    '-y',
+                                    '-i', dashUrl,
+                                    '-c', 'copy',
+                                    '-movflags', '+faststart',
+                                    outPath
+                                ];
+                                const ff = spawn('ffmpeg', args);
+                                ff.stderr?.on('data', (d) => stderrChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(String(d))));
+                                ff.on('error', (err) => reject(err));
+                                ff.on('close', (code) => {
+                                    if (code === 0) resolve();
+                                    else reject(new Error(`ffmpeg exited with code ${code}\n${Buffer.concat(stderrChunks).toString()}`));
+                                });
+                            });
+
+                            if (!fs.existsSync(outPath)) return false;
+                            const st = fs.statSync(outPath);
+                            if (st.size <= 0) return false;
+                            // Size check and upload
+                            const maxSize = 8 * 1024 * 1024;
+                            if (st.size > maxSize) {
+                                await interaction.editReply({ embeds: [embed], content: `Merged video is too large to upload (${(st.size / (1024 * 1024)).toFixed(1)} MB). Here's the post: https://reddit.com${chosen.permalink || ""}` });
+                                return true;
+                            }
+                            await interaction.editReply({ embeds: [], files: [{ attachment: outPath, name: `${subreddit}-${id}.mp4` } as any], content: undefined as any });
+                            return true;
+                        };
+
+                        let handled = false;
+                        try {
+                            handled = await tryFfmpegOnDash();
+                        } catch (e) {
+                            console.error('ffmpeg dash merge failed:', e);
+                        }
+
+                        if (!handled) {
+                            // Manual path: download video and try to fetch audio, then merge
+                            await downloadToFile(mediaUrl, videoPath);
+
+                            // Try to figure out audio url
+                            let audioUrl: string | null = null;
+                            if (dashUrl) {
+                                audioUrl = dashUrl.replace(/DASH_(\d+)\.mpd$/i, 'DASH_audio.mp4');
+                            }
+                            if (!audioUrl && chosen.media?.reddit_video?.fallback_url) {
+                                audioUrl = deriveAudioUrlFromFallback(chosen.media.reddit_video.fallback_url);
+                            }
+                            if (!audioUrl) {
+                                const m = mediaUrl.match(/v\.redd\.it\/(\w+)\//i);
+                                if (m && m[1]) audioUrl = `https://v.redd.it/${m[1]}/DASH_audio.mp4`;
+                            }
+
+                            let haveAudio = false;
+                            if (audioUrl) {
+                                try {
+                                    const resp = await fetch(audioUrl);
+                                    if (resp.ok) {
+                                        const ab = await resp.arrayBuffer();
+                                        await fs.promises.writeFile(audioPath, Buffer.from(ab));
+                                        const st = fs.statSync(audioPath);
+                                        haveAudio = st.size > 0;
+                                    }
+                                } catch {
+                                    haveAudio = false;
+                                }
+                            }
+
+                            if (haveAudio) {
+                                // Merge with ffmpeg, capture stderr for diagnostics
+                                const stderrChunks: Buffer[] = [];
+                                await new Promise<void>((resolve, reject) => {
+                                    const args = [
+                                        '-y',
+                                        '-i', videoPath,
+                                        '-i', audioPath,
+                                        '-c:v', 'copy',
+                                        '-c:a', 'aac',
+                                        '-map', '0:v:0',
+                                        '-map', '1:a:0',
+                                        '-shortest',
+                                        '-movflags', '+faststart',
+                                        outPath
+                                    ];
+                                    const ff = spawn('ffmpeg', args);
+                                    ff.stderr?.on('data', (d) => stderrChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(String(d))));
+                                    ff.on('error', (err) => reject(err));
+                                    ff.on('close', (code) => {
+                                        if (code === 0) resolve();
+                                        else reject(new Error(`ffmpeg exited with code ${code}\n${Buffer.concat(stderrChunks).toString()}`));
+                                    });
+                                });
+
+                                const stats = fs.statSync(outPath);
+                                const maxSize = 8 * 1024 * 1024;
+                                if (stats.size > maxSize) {
+                                    await interaction.editReply({ embeds: [embed], content: `Merged video is too large to upload (${(stats.size / (1024 * 1024)).toFixed(1)} MB). Here's the post: https://reddit.com${chosen.permalink || ""}` });
+                                } else {
+                                    await interaction.editReply({ embeds: [], files: [{ attachment: outPath, name: `${subreddit}-${id}.mp4` } as any], content: undefined as any });
+                                    didUploadFile = true;
+                                }
+                            } else {
+                                // No audio available; upload video-only if small enough, else link
+                                const stats = fs.statSync(videoPath);
+                                const maxSize = 8 * 1024 * 1024;
+                                if (stats.size > maxSize) {
+                                    await interaction.editReply({ embeds: [embed], content: `Video is too large to upload (${(stats.size / (1024 * 1024)).toFixed(1)} MB). Here's the post: https://reddit.com${chosen.permalink || ""}` });
+                                } else {
+                                    await interaction.editReply({ embeds: [], files: [{ attachment: videoPath, name: `${subreddit}-${id}.mp4` } as any], content: undefined as any });
+                                    didUploadFile = true;
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error('reddit video processing error:', err);
+                        // Fall back to link if anything fails
+                        try {
+                            await interaction.editReply({ embeds: [embed], content: mediaUrl });
+                        } catch {}
+                    } finally {
+                        // Cleanup temp files
+                        try { if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath); } catch {}
+                        try { if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath); } catch {}
+                        try { if (fs.existsSync(outPath)) fs.unlinkSync(outPath); } catch {}
+                    }
                 } else {
+                    // Image/GIF: keep existing embed behavior
                     embed.setImage(mediaUrl);
                     await interaction.editReply({ embeds: [embed] });
                 }
