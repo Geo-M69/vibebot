@@ -24,7 +24,8 @@ const botConfig = {
         'Guilds',
         'GuildMessages', 
         'MessageContent',
-        'GuildMembers'
+        'GuildMembers',
+        'GuildVoiceStates'  // Required for music bot to detect voice channels
     ],
 
     partials: [

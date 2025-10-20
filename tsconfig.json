@@ -8,7 +8,9 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "lib": ["ES2020", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    "outDir": "./",
+    "rootDir": "./"
   },
   "include": [
     "commands/**/*.ts",

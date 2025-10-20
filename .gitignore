@@ -1,4 +1,5 @@
 node_modules/
+example-5/
 
 .env
 .env.*                 # e.g. .env.local, .env.test, .env.production
