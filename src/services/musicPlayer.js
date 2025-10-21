@@ -4,15 +4,19 @@ const {
     joinVoiceChannel, 
     AudioPlayerStatus,
     VoiceConnectionStatus,
-    entersState
+    entersState,
+    StreamType
 } = require('@discordjs/voice');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const play = require('play-dl');
 
 class MusicPlayer {
     constructor() {
         this.queues = new Map(); // guildId -> queue object
+        this.usePlayDl = true; // Track if play-dl is working (default: try it first)
+        this.streamCache = new Map(); // Cache stream URLs: url -> { streamUrl, expires }
     }
 
     /**
@@ -73,11 +77,45 @@ class MusicPlayer {
     }
 
     /**
-     * Get video info using yt-dlp
+     * Get video info - Hybrid approach (play-dl primary, yt-dlp fallback)
      */
     async getVideoInfo(query) {
+        const startTime = Date.now();
+        const isUrl = query.startsWith('http://') || query.startsWith('https://');
+        
+        // For URLs, try play-dl first (faster)
+        if (isUrl && this.usePlayDl) {
+            try {
+                console.log('[INFO] Attempting play-dl for video info...');
+                const info = await play.video_info(query);
+                const videoDetails = info.video_details;
+                
+                const duration = Date.now() - startTime;
+                console.log(`[PERF] ✅ play-dl video info fetched in ${duration}ms`);
+                
+                return {
+                    title: videoDetails.title || 'Unknown Title',
+                    url: videoDetails.url,
+                    duration: videoDetails.durationInSec || 0,
+                    thumbnail: videoDetails.thumbnails?.[0]?.url || '',
+                    uploader: videoDetails.channel?.name || 'Unknown',
+                    id: videoDetails.id || ''
+                };
+            } catch (error) {
+                console.log(`[INFO] ⚠️ play-dl failed for video info, using yt-dlp`);
+            }
+        }
+        
+        // Fallback to yt-dlp (works for both URLs and search queries)
+        return this.getVideoInfoWithYtDlp(query, startTime);
+    }
+
+    /**
+     * Get video info using yt-dlp (fallback method)
+     */
+    async getVideoInfoWithYtDlp(query, startTime = Date.now()) {
         try {
-            // Check if it's a URL or search query
+            console.log('[INFO] Using yt-dlp for video info...');
             const isUrl = query.startsWith('http://') || query.startsWith('https://');
             const searchQuery = isUrl ? query : `ytsearch1:${query}`;
 
@@ -94,6 +132,9 @@ class MusicPlayer {
                 throw new Error(`Incomplete video info received (got ${lines.length} lines)`);
             }
             
+            const duration = Date.now() - startTime;
+            console.log(`[PERF] ✅ yt-dlp video info fetched in ${duration}ms`);
+            
             return {
                 title: lines[0] || 'Unknown Title',
                 url: lines[1] || query,
@@ -103,7 +144,7 @@ class MusicPlayer {
                 id: lines[5] || ''
             };
         } catch (error) {
-            console.error('getVideoInfo error:', error.stderr || error.message);
+            console.error('getVideoInfoWithYtDlp error:', error.stderr || error.message);
             throw new Error(`Failed to get video info: ${error.stderr || error.message}`);
         }
     }
@@ -138,13 +179,59 @@ class MusicPlayer {
     }
 
     /**
-     * Create audio stream using yt-dlp
+     * Create audio stream - Hybrid approach (play-dl primary, yt-dlp fallback)
      */
     async createStream(url) {
+        const startTime = Date.now();
+        
+        // Try play-dl first if it's enabled (fast: 2-5 seconds)
+        if (this.usePlayDl) {
+            try {
+                console.log('[STREAM] Attempting play-dl (fast method)...');
+                const stream = await play.stream(url, { 
+                    discordPlayerCompatibility: true 
+                });
+                
+                const resource = createAudioResource(stream.stream, {
+                    inputType: stream.type,
+                    inlineVolume: true
+                });
+                
+                const duration = Date.now() - startTime;
+                console.log(`[PERF] ✅ play-dl stream created in ${duration}ms`);
+                return resource;
+            } catch (error) {
+                console.log(`[STREAM] ⚠️ play-dl failed: ${error.message}`);
+                console.log('[STREAM] Disabling play-dl, will use yt-dlp for this session');
+                this.usePlayDl = false; // Disable for the rest of the session
+            }
+        }
+        
+        // Fallback to yt-dlp (reliable but slower: 15-25 seconds)
+        return this.createStreamWithYtDlp(url, startTime);
+    }
+
+    /**
+     * Create audio stream using yt-dlp (fallback method)
+     */
+    async createStreamWithYtDlp(url, startTime = Date.now()) {
         try {
-            // Optimized: Use specific format codes (251=opus, best for Discord)
-            // --no-check-certificate and --no-playlist for speed
-            // Format 251 is Opus in WebM, native Discord format
+            console.log('[STREAM] Using yt-dlp (reliable method)...');
+            
+            // Check cache first (instant if cached)
+            const cached = this.streamCache.get(url);
+            if (cached && cached.expires > Date.now()) {
+                console.log('[CACHE] ✅ Using cached stream URL (instant)');
+                const resource = createAudioResource(cached.streamUrl, {
+                    inlineVolume: true,
+                    inputType: StreamType.Arbitrary
+                });
+                const duration = Date.now() - startTime;
+                console.log(`[PERF] ✅ Cached stream created in ${duration}ms`);
+                return resource;
+            }
+            
+            // Fetch new stream URL with yt-dlp
             const { stdout, stderr } = await execAsync(
                 `yt-dlp -f 251/250/249/140/bestaudio --no-check-certificate --no-playlist --get-url "${url}"`,
                 { maxBuffer: 1024 * 1024 * 5, timeout: 30000 }
@@ -157,15 +244,24 @@ class MusicPlayer {
                 throw new Error(`No stream URL returned. stderr: ${stderr}`);
             }
             
+            // Cache the stream URL (expires in 5 hours - YouTube URLs last 6+ hours)
+            this.streamCache.set(url, {
+                streamUrl,
+                expires: Date.now() + (5 * 60 * 60 * 1000) // 5 hours
+            });
+            console.log('[CACHE] Cached stream URL for 5 hours');
+            
             // Create audio resource from the stream URL
             const resource = createAudioResource(streamUrl, {
                 inlineVolume: true,
-                inputType: 0 // StreamType.Arbitrary - let FFmpeg auto-detect
+                inputType: StreamType.Arbitrary
             });
 
+            const duration = Date.now() - startTime;
+            console.log(`[PERF] ✅ yt-dlp stream created in ${duration}ms`);
             return resource;
         } catch (error) {
-            console.error('createStream error:', {
+            console.error('createStreamWithYtDlp error:', {
                 message: error.message,
                 stderr: error.stderr,
                 code: error.code,
@@ -399,6 +495,35 @@ class MusicPlayer {
             return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
         return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    /**
+     * Clear stream cache (useful for troubleshooting)
+     */
+    clearCache() {
+        const size = this.streamCache.size;
+        this.streamCache.clear();
+        console.log(`[CACHE] Cleared ${size} cached stream URLs`);
+        return size;
+    }
+
+    /**
+     * Reset play-dl flag (re-enable it after it was disabled)
+     */
+    resetPlayDl() {
+        this.usePlayDl = true;
+        console.log('[STREAM] play-dl re-enabled');
+    }
+
+    /**
+     * Get streaming stats
+     */
+    getStats() {
+        return {
+            usingPlayDl: this.usePlayDl,
+            cachedUrls: this.streamCache.size,
+            activeQueues: this.queues.size
+        };
     }
 }
 
