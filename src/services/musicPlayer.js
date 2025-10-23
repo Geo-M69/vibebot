@@ -95,7 +95,7 @@ class MusicPlayer {
                 
                 return {
                     title: videoDetails.title || 'Unknown Title',
-                    url: videoDetails.url,
+                    url: `https://www.youtube.com/watch?v=${videoDetails.id}`,
                     duration: videoDetails.durationInSec || 0,
                     thumbnail: videoDetails.thumbnails?.[0]?.url || '',
                     uploader: videoDetails.channel?.name || 'Unknown',
