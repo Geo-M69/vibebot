@@ -1,13 +1,13 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const discord_js_1 = require("discord.js");
-exports.default = {
-    data: new discord_js_1.SlashCommandBuilder()
+import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+
+export default {
+    data: new SlashCommandBuilder()
         .setName('ping')
         .setDescription('Replies with Pong and latency information!'),
-    async execute(interaction) {
+    async execute(interaction: ChatInputCommandInteraction) {
         const sent = await interaction.reply({ content: 'Pinging...', fetchReply: true });
         const pingTime = sent.createdTimestamp - interaction.createdTimestamp;
+        
         await interaction.editReply(`Pong! 🏓\nBot Latency: ${pingTime}ms\nAPI Latency: ${Math.round(interaction.client.ws.ping)}ms`);
     },
 };
