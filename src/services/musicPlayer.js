@@ -17,6 +17,7 @@ class MusicPlayer {
         this.queues = new Map(); // guildId -> queue object
         this.usePlayDl = true; // Track if play-dl is working (default: try it first)
         this.streamCache = new Map(); // Cache stream URLs: url -> { streamUrl, expires }
+        this.videoInfoCache = new Map(); // Cache video info: url -> { videoInfo, expires }
     }
 
     /**
@@ -83,6 +84,17 @@ class MusicPlayer {
         const startTime = Date.now();
         const isUrl = query.startsWith('http://') || query.startsWith('https://');
         
+        // Check cache first for URLs (instant if cached)
+        if (isUrl) {
+            const cached = this.videoInfoCache.get(query);
+            if (cached && cached.expires > Date.now()) {
+                console.log('[CACHE] ✅ Using cached video info (instant)');
+                const duration = Date.now() - startTime;
+                console.log(`[PERF] ✅ Cached video info retrieved in ${duration}ms`);
+                return cached.videoInfo;
+            }
+        }
+        
         // For URLs, try play-dl first (faster)
         if (isUrl && this.usePlayDl) {
             try {
@@ -93,7 +105,7 @@ class MusicPlayer {
                 const duration = Date.now() - startTime;
                 console.log(`[PERF] ✅ play-dl video info fetched in ${duration}ms`);
                 
-                return {
+                const videoInfo = {
                     title: videoDetails.title || 'Unknown Title',
                     url: `https://www.youtube.com/watch?v=${videoDetails.id}`,
                     duration: videoDetails.durationInSec || 0,
@@ -101,6 +113,15 @@ class MusicPlayer {
                     uploader: videoDetails.channel?.name || 'Unknown',
                     id: videoDetails.id || ''
                 };
+                
+                // Cache the video info (expires in 1 hour)
+                this.videoInfoCache.set(query, {
+                    videoInfo,
+                    expires: Date.now() + (60 * 60 * 1000) // 1 hour
+                });
+                console.log('[CACHE] Cached video info for 1 hour');
+                
+                return videoInfo;
             } catch (error) {
                 console.log(`[INFO] ⚠️ play-dl failed for video info, using yt-dlp`);
             }
@@ -135,7 +156,7 @@ class MusicPlayer {
             const duration = Date.now() - startTime;
             console.log(`[PERF] ✅ yt-dlp video info fetched in ${duration}ms`);
             
-            return {
+            const videoInfo = {
                 title: lines[0] || 'Unknown Title',
                 url: lines[1] || query,
                 duration: parseInt(lines[2]) || 0,
@@ -143,6 +164,17 @@ class MusicPlayer {
                 uploader: lines[4] || 'Unknown',
                 id: lines[5] || ''
             };
+            
+            // Cache the video info if it's a URL (expires in 1 hour)
+            if (isUrl) {
+                this.videoInfoCache.set(query, {
+                    videoInfo,
+                    expires: Date.now() + (60 * 60 * 1000) // 1 hour
+                });
+                console.log('[CACHE] Cached video info for 1 hour');
+            }
+            
+            return videoInfo;
         } catch (error) {
             console.error('getVideoInfoWithYtDlp error:', error.stderr || error.message);
             throw new Error(`Failed to get video info: ${error.stderr || error.message}`);
@@ -183,6 +215,19 @@ class MusicPlayer {
      */
     async createStream(url) {
         const startTime = Date.now();
+        
+        // Check cache first (instant if cached)
+        const cached = this.streamCache.get(url);
+        if (cached && cached.expires > Date.now()) {
+            console.log('[CACHE] ✅ Using cached stream URL (instant)');
+            const resource = createAudioResource(cached.streamUrl, {
+                inlineVolume: true,
+                inputType: StreamType.Arbitrary
+            });
+            const duration = Date.now() - startTime;
+            console.log(`[PERF] ✅ Cached stream created in ${duration}ms`);
+            return resource;
+        }
         
         // Try play-dl first if it's enabled (fast: 2-5 seconds)
         if (this.usePlayDl) {
@@ -501,10 +546,12 @@ class MusicPlayer {
      * Clear stream cache (useful for troubleshooting)
      */
     clearCache() {
-        const size = this.streamCache.size;
+        const streamSize = this.streamCache.size;
+        const videoInfoSize = this.videoInfoCache.size;
         this.streamCache.clear();
-        console.log(`[CACHE] Cleared ${size} cached stream URLs`);
-        return size;
+        this.videoInfoCache.clear();
+        console.log(`[CACHE] Cleared ${streamSize} cached stream URLs and ${videoInfoSize} cached video info`);
+        return { streamCache: streamSize, videoInfoCache: videoInfoSize };
     }
 
     /**
@@ -521,7 +568,8 @@ class MusicPlayer {
     getStats() {
         return {
             usingPlayDl: this.usePlayDl,
-            cachedUrls: this.streamCache.size,
+            cachedStreamUrls: this.streamCache.size,
+            cachedVideoInfo: this.videoInfoCache.size,
             activeQueues: this.queues.size
         };
     }
