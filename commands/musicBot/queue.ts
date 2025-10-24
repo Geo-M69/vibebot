@@ -16,7 +16,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel!')
+                        .setDescription('You need to be in a voice channel!')
                 ],
                 ephemeral: true
             });
@@ -29,7 +29,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ The queue is empty!')
+                        .setDescription('The queue is empty!')
                 ],
                 ephemeral: true
             });
@@ -56,7 +56,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setColor('#0099FF')
-            .setTitle('🎵 Music Queue')
+            .setTitle('Music Queue')
             .setDescription(description)
             .addFields(
                 { name: 'Songs in Queue', value: `${queue.songs.length}`, inline: true },

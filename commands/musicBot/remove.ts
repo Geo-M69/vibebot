@@ -23,7 +23,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel!')
+                        .setDescription('You need to be in a voice channel!')
                 ],
                 ephemeral: true
             });
@@ -36,7 +36,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ The queue is empty!')
+                        .setDescription('The queue is empty!')
                 ],
                 ephemeral: true
             });
@@ -50,7 +50,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#00FF00')
-                        .setDescription(`🗑️ Removed: **${removed.title}**`)
+                        .setDescription(`Removed: **${removed.title}**`)
                 ]
             });
         } else {
@@ -58,7 +58,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ Invalid position! Use `/queue` to see the queue.')
+                        .setDescription('Invalid position! Use `/queue` to see the queue.')
                 ],
                 ephemeral: true
             });

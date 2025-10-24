@@ -22,7 +22,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel to play music!')
+                        .setDescription('You need to be in a voice channel to play music!')
                 ],
                 ephemeral: true
             });
@@ -35,7 +35,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ I need **Connect** and **Speak** permissions in your voice channel!')
+                        .setDescription('I need **Connect** and **Speak** permissions in your voice channel!')
                 ],
                 ephemeral: true
             });
@@ -56,7 +56,7 @@ module.exports = {
             if (result.type === 'playing') {
                 const embed = new EmbedBuilder()
                     .setColor('#00FF00')
-                    .setTitle('🎵 Now Playing')
+                    .setTitle('Now Playing')
                     .setDescription(`[${result.song.title}](${result.song.url})`)
                     .addFields(
                         { name: 'Duration', value: musicPlayer.formatDuration(result.song.duration), inline: true },
@@ -72,7 +72,7 @@ module.exports = {
             } else if (result.type === 'added') {
                 const embed = new EmbedBuilder()
                     .setColor('#0099FF')
-                    .setTitle('➕ Added to Queue')
+                    .setTitle('Added to Queue')
                     .setDescription(`[${result.song.title}](${result.song.url})`)
                     .addFields(
                         { name: 'Position in Queue', value: `${result.position}`, inline: true },
@@ -85,7 +85,7 @@ module.exports = {
             } else if (result.type === 'playlist') {
                 const embed = new EmbedBuilder()
                     .setColor('#00FF00')
-                    .setTitle('📃 Playlist Added')
+                    .setTitle('Playlist Added')
                     .setDescription(`Added **${result.count}** songs to the queue`)
                     .addFields(
                         { name: 'First Song', value: result.songs[0].title, inline: false },
@@ -100,7 +100,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription(`❌ An error occurred: ${error.message}`)
+                        .setDescription(`An error occurred: ${error.message}`)
                 ]
             });
         }

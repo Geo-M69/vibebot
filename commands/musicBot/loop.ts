@@ -27,7 +27,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel!')
+                        .setDescription('You need to be in a voice channel!')
                 ],
                 ephemeral: true
             });
@@ -40,7 +40,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ Nothing is playing right now!')
+                        .setDescription('Nothing is playing right now!')
                 ],
                 ephemeral: true
             });
@@ -52,13 +52,12 @@ module.exports = {
         musicPlayer.setLoop(interaction.guildId!, mode);
 
         const modeText = mode === 0 ? 'Off' : mode === 1 ? 'Song' : 'Queue';
-        const emoji = mode === 0 ? '➡️' : mode === 1 ? '🔂' : '🔁';
 
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setColor('#0099FF')
-                    .setDescription(`${emoji} Loop mode set to **${modeText}**`)
+                    .setDescription(`Loop mode set to **${modeText}**`)
             ]
         });
     }

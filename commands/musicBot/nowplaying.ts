@@ -16,7 +16,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel!')
+                        .setDescription('You need to be in a voice channel!')
                 ],
                 ephemeral: true
             });
@@ -29,7 +29,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ Nothing is playing right now!')
+                        .setDescription('Nothing is playing right now!')
                 ],
                 ephemeral: true
             });
@@ -39,7 +39,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setColor('#00FF00')
-            .setTitle('🎵 Now Playing')
+            .setTitle('Now Playing')
             .setDescription(`[${song.title}](${song.url})`)
             .addFields(
                 { name: 'Duration', value: musicPlayer.formatDuration(song.duration), inline: true },

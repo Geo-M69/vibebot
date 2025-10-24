@@ -16,7 +16,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel!')
+                        .setDescription('You need to be in a voice channel!')
                 ],
                 ephemeral: true
             });
@@ -29,7 +29,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ The queue is already empty!')
+                        .setDescription('The queue is already empty!')
                 ],
                 ephemeral: true
             });
@@ -43,7 +43,7 @@ module.exports = {
             embeds: [
                 new EmbedBuilder()
                     .setColor('#00FF00')
-                    .setDescription(`🗑️ Cleared **${clearedCount}** songs from the queue`)
+                    .setDescription(`Cleared **${clearedCount}** songs from the queue`)
             ]
         });
     }

@@ -16,7 +16,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ You need to be in a voice channel!')
+                        .setDescription('You need to be in a voice channel!')
                 ],
                 ephemeral: true
             });
@@ -29,7 +29,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ Nothing is in the queue!')
+                        .setDescription('Nothing is in the queue!')
                 ],
                 ephemeral: true
             });
@@ -42,7 +42,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#00FF00')
-                        .setDescription('▶️ Resumed the music')
+                        .setDescription('Resumed the music')
                 ]
             });
         } else {
@@ -50,7 +50,7 @@ module.exports = {
                 embeds: [
                     new EmbedBuilder()
                         .setColor('#FF0000')
-                        .setDescription('❌ Failed to resume the music')
+                        .setDescription('Failed to resume the music')
                 ],
                 ephemeral: true
             });

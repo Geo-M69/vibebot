@@ -1,5 +1,6 @@
 node_modules/
 example-5/
+commands/**/*.js
 
 .env
 .env.*                 # e.g. .env.local, .env.test, .env.production
